@@ -8,3 +8,7 @@ edition = "2018"
 
 [dependencies]
 clap = "2.33.0"
+#graphql_client = "0.8.0"
+reqwest = "0.9.18"
+
+serde_json = ""
