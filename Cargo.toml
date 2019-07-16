@@ -12,3 +12,5 @@ clap = "2.33.0"
 reqwest = "0.9.18"
 
 serde_json = ""
+
+nom = "5.0.0"

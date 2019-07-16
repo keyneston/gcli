@@ -2,6 +2,7 @@ extern crate clap;
 use clap::{App, Arg, ArgMatches, SubCommand};
 use std::fs;
 
+mod fmt;
 mod graphqlclient;
 
 static version: &'static str = "0.1";
@@ -24,19 +25,47 @@ fn create_config(matches: clap::ArgMatches) -> Config {
 fn main() {
     let matches = App::new("gcli")
         .version(version)
-        .arg(
-            Arg::with_name("queryFile")
-                .help("The name of the file to load the query from")
-                .required(true),
+        .subcommand(
+            SubCommand::with_name("fmt")
+                .about("format graphql files")
+                .arg(
+                    Arg::with_name("fmtFile")
+                        .help("The name of the file to format")
+                        .required(true),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("query")
+                .about("make graphql query")
+                .arg(
+                    Arg::with_name("queryFile")
+                        .help("The name of the file to load the query from")
+                        .required(true),
+                ),
         )
         .get_matches();
 
-    let config = create_config(matches);
+    match matches.subcommand_name() {
+        Some("fmt") => fmt_command(matches.subcommand_matches("fmt").unwrap()),
+        Some("query") => query_command(matches.subcommand_matches("query").unwrap()),
+        None => {
+            println!("Must set subcommand");
+        }
+        _ => {
+            println!("Unknown subcommand");
+        }
+    }
+}
 
-    //read_query_file(&config.queryFile);
+fn fmt_command(matches: &ArgMatches) {
+    let file = matches.value_of("fmtFile").unwrap();
+    println!("calling fmt on: {}", file);
 
+    fmt::format_file(file);
+}
+
+fn query_command(matches: &ArgMatches) {
     let client = graphqlclient::Client::new("http://localhost:8080/query");
-
     client.get_schema();
 }
 
