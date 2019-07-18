@@ -1,28 +1,24 @@
 extern crate nom;
 use std::fs;
 
+// TODO: figure this out
+#[path = "../ast/mod.rs"]
+mod ast;
+
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while_m_n},
+    bytes::complete::{tag_no_case, take_while1, take_while_m_n},
     character::complete::{char, space0},
+    character::is_alphabetic,
+    character::is_alphanumeric,
     combinator::{map_res, opt, peek},
-    error::make_error,
+    error,
+    error::VerboseError,
     sequence::tuple,
-    IResult,
+    AsChar, IResult,
 };
 
-#[derive(Debug, PartialEq)]
-pub enum QueryType {
-    Query,
-    Mutation,
-}
-
-struct QueryAST {}
-
-#[derive(Debug, PartialEq)]
-struct GraphqlQuery {
-    queryType: QueryType,
-}
+use ast::{Operation, QueryType};
 
 pub fn format_file(filename: &str) -> String {
     let contents = fs::read_to_string(filename).unwrap();
@@ -41,29 +37,48 @@ pub fn format_string(input: &str) -> String {
     return "".to_string();
 }
 
-fn parse_query(input: &str) -> IResult<&str, GraphqlQuery> {
+fn parse_query(input: &str) -> IResult<&str, Operation> {
     let (input, queryType) = parse_query_type(input)?;
 
     Ok((
         input,
-        GraphqlQuery {
-            queryType: queryType,
+        Operation {
+            QueryType: queryType,
+            QueryParams: None,
         },
     ))
 }
 
 fn parse_query_type(input: &str) -> IResult<&str, QueryType> {
     let (input, _) = space0(input)?;
-    let (input, queryType) = opt(alt((tag("query"), tag("mutation"))))(input)?;
+    let (input, queryType) = opt(alt((tag_no_case("query"), tag_no_case("mutation"))))(input)?;
     let (input, _) = space0(input)?;
     let (input, _) = char('{')(input)?;
 
-    match queryType {
+    let queryType = queryType.map(|s: &str| {
+        let mut s = s.to_string();
+        s.make_ascii_lowercase();
+        s
+    });
+
+    match queryType.as_ref().map(String::as_str) {
         Some("query") => Ok((input, QueryType::Query)),
         Some("mutation") => Ok((input, QueryType::Mutation)),
-        Some(queryType) => unimplemented!(),
+        Some(queryType) => panic!("don't know how to handle queryType {}", queryType), // TODO: make a custom error format
         None => Ok((input, QueryType::Query)),
     }
+}
+
+fn parse_query_params(input: &str) -> IResult<&str, ()> {
+    //delimited(char('\"'), parse_str, char('\"'))(input)
+    unimplemented!()
+}
+
+fn parse_variable_name(input: &str) -> IResult<&str, &str> {
+    let (input, _) = char('$')(input)?;
+    let (input, name) = take_while1(AsChar::is_alphanum)(input)?;
+
+    return Ok((input, name));
 }
 
 #[cfg(test)]
@@ -87,6 +102,15 @@ mod tests {
         assert_eq!(queryType, QueryType::Query);
     }
 
+    #[test]
+    fn casesensitive_query_parse_query_type() {
+        let input = "QUERY {";
+        let (_, queryType) = parse_query_type(input).unwrap();
+
+        assert_eq!(queryType, QueryType::Query);
+    }
+
+    #[test]
     fn default_parse_query_type() {
         let input = "{";
         let (_, queryType) = parse_query_type(input).unwrap();
