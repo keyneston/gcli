@@ -74,17 +74,28 @@ fn parse_query_params(input: &str) -> IResult<&str, ()> {
     unimplemented!()
 }
 
-fn parse_variable_name(input: &str) -> IResult<&str, &str> {
-    let (input, _) = char('$')(input)?;
+fn parse_variable_name(input: &str) -> IResult<&str, String> {
+    let (input, sigil) = char('$')(input)?;
     let (input, name) = take_while1(AsChar::is_alphanum)(input)?;
 
-    return Ok((input, name));
+    let mut s = sigil.to_string();
+    s.push_str(name);
+
+    return Ok((input, s));
 }
 
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+
+    #[test]
+    fn test_parse_var_name() {
+        let input = "$foo";
+
+        let (_, varName) = parse_variable_name(input).unwrap();
+        assert_eq!(varName, "$foo");
+    }
 
     #[test]
     fn mutation_parse_query_type() {
