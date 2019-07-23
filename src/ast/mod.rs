@@ -4,6 +4,7 @@ use std::collections::HashMap;
 pub enum QueryType {
     Query,
     Mutation,
+    Subscription,
 }
 
 pub type VarName = String;

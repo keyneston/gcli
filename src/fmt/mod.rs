@@ -49,7 +49,11 @@ fn parse_query(input: &str) -> IResult<&str, Operation> {
 
 fn parse_query_type(input: &str) -> IResult<&str, QueryType> {
     let (input, _) = space0(input)?;
-    let (input, query_type) = opt(alt((tag_no_case("query"), tag_no_case("mutation"))))(input)?;
+    let (input, query_type) = opt(alt((
+        tag_no_case("query"),
+        tag_no_case("mutation"),
+        tag_no_case("subscription"),
+    )))(input)?;
     let (input, _) = space0(input)?;
     let (input, _) = char('{')(input)?;
 
@@ -62,6 +66,7 @@ fn parse_query_type(input: &str) -> IResult<&str, QueryType> {
     match query_type.as_ref().map(String::as_str) {
         Some("query") => Ok((input, QueryType::Query)),
         Some("mutation") => Ok((input, QueryType::Mutation)),
+        Some("subscription") => Ok((input, QueryType::Subscription)),
         Some(query_type) => panic!("don't know how to handle query_type {}", query_type), // TODO: make a custom error format
         None => Ok((input, QueryType::Query)),
     }
@@ -162,6 +167,14 @@ mod tests {
         let (_, query_type) = parse_query_type(input).unwrap();
 
         assert_eq!(query_type, QueryType::Query);
+    }
+
+    #[test]
+    fn subscription_parse_query_type() {
+        let input = "subscription {";
+        let (_, query_type) = parse_query_type(input).expect("Error calling parse_query_type");
+
+        assert_eq!(query_type, QueryType::Subscription);
     }
 
     #[test]
