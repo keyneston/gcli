@@ -14,6 +14,15 @@ pub struct Document {
     definitions: Vec<Definition>,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum SelectionItem {
+    Field(String),
+    FragmentSpread(String),
+    InlineFragment,
+}
+
+pub type SelectionSet = Vec<SelectionItem>;
+
 /// [Definition](https://graphql.github.io/graphql-spec/June2018/#Definition)
 #[derive(Debug, PartialEq)]
 pub enum Definition {

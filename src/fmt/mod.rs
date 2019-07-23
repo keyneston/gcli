@@ -12,6 +12,7 @@ use nom::{
     bytes::complete::{tag_no_case, take_till, take_while, take_while1},
     character::complete::{char, space0},
     combinator::opt,
+    multi::separated_list,
     AsChar, IResult,
 };
 
@@ -45,6 +46,25 @@ fn parse_query(input: &str) -> IResult<&str, Operation> {
             query_params: Some(query_params),
         },
     ))
+}
+
+fn parse_selection_set(input: &str) -> IResult<&str, ast::SelectionSet> {
+    let (input, _) = parse_seperator('{')(input)?;
+    let (input, res) = separated_list(
+        // The parse_seperator('\n') bit doesn't work because parse_seperator eats the newline
+        // before it gets to the checking of the separator itself.
+        alt((parse_seperator(','), parse_seperator('\n'))),
+        parse_selection_item,
+    )(input)?;
+    let (input, _) = parse_seperator('}')(input)?;
+
+    Ok((input, res))
+}
+
+fn parse_selection_item(input: &str) -> IResult<&str, ast::SelectionItem> {
+    let (input, item) = take_while(AsChar::is_alphanum)(input)?;
+
+    Ok((input, ast::SelectionItem::Field(item.to_string())))
 }
 
 fn parse_query_type(input: &str) -> IResult<&str, QueryType> {
@@ -197,5 +217,35 @@ mod tests {
             }
         );
         assert_eq!(remaining, "This is not a comment");
+    }
+
+    #[test]
+    fn test_parse_selection_set() {
+        let input = "{id, foo, bar}";
+        let (_, selection_set) = parse_selection_set(input).unwrap();
+
+        assert_eq!(
+            selection_set,
+            vec!(
+                ast::SelectionItem::Field("id".to_string()),
+                ast::SelectionItem::Field("foo".to_string()),
+                ast::SelectionItem::Field("bar".to_string()),
+            )
+        )
+    }
+
+    #[test]
+    fn newline_sepearted_test_parse_selection_set() {
+        let input = "{id\nfoo\nbar}";
+        let (_, selection_set) = parse_selection_set(input).unwrap();
+
+        assert_eq!(
+            selection_set,
+            vec!(
+                ast::SelectionItem::Field("id".to_string()),
+                ast::SelectionItem::Field("foo".to_string()),
+                ast::SelectionItem::Field("bar".to_string()),
+            )
+        )
     }
 }
