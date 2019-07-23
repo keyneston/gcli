@@ -43,8 +43,8 @@ fn parse_query(input: &str) -> IResult<&str, Operation> {
     Ok((
         input,
         Operation {
-            QueryType: query_type,
-            QueryParams: None,
+            query_type: query_type,
+            query_params: None,
         },
     ))
 }
@@ -77,25 +77,35 @@ fn is_whitespace(c: char) -> bool {
     c == '\n' || c == ' ' || c == '\t'
 }
 
-fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
+fn take_whitespace(input: &str) -> IResult<&str, ()> {
     let (input, _) = take_while(is_whitespace)(input)?;
+
+    Ok((input, ()))
+}
+
+fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
+    let (input, _) = take_whitespace(input)?;
     let (input, _) = char('#')(input)?;
     let (input, comment_text) = take_till(is_eol)(input)?;
-    let (input, _) = take_while(is_whitespace)(input)?;
+    let (input, _) = take_whitespace(input)?;
 
     return Ok((
         input,
         ast::Comment {
-            Text: comment_text.to_string(),
+            text: comment_text.to_string(),
         },
     ));
 }
 
 fn parse_query_params(input: &str) -> IResult<&str, ()> {
     let (input, _) = char('(')(input)?;
+    let (input, _) = take_whitespace(input)?;
     let (input, var_name) = parse_variable_name(input)?;
+    let (input, _) = take_whitespace(input)?;
     let (input, _) = char(':')(input)?;
-    let (input, thing) = take_while1(AsChar::is_alphanum)(input)?;
+    let (input, _) = take_whitespace(input)?;
+    let (input, _thing) = take_while1(AsChar::is_alphanum)(input)?;
+    let (input, _) = take_whitespace(input)?;
     let (input, _) = char(')')(input)?;
 
     Ok((input, ()))
@@ -113,15 +123,14 @@ fn parse_variable_name(input: &str) -> IResult<&str, String> {
 
 #[cfg(test)]
 mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
 
     #[test]
     fn test_parse_var_name() {
         let input = "$foo: baz_bar";
 
-        let (_, varName) = parse_variable_name(input).unwrap();
-        assert_eq!(varName, "$foo");
+        let (_, var_name) = parse_variable_name(input).unwrap();
+        assert_eq!(var_name, "$foo");
     }
 
     #[test]
@@ -164,7 +173,7 @@ mod tests {
         assert_eq!(
             comment,
             ast::Comment {
-                Text: " This is a comment".to_string()
+                text: " This is a comment".to_string()
             }
         );
         assert_eq!(remaining, "This is not a comment");

@@ -22,11 +22,11 @@ pub enum Definition {
 
 #[derive(Debug, PartialEq)]
 pub struct Operation {
-    pub QueryType: QueryType,
-    pub QueryParams: Option<HashMap<String, String>>,
+    pub query_type: QueryType,
+    pub query_params: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Comment {
-    pub Text: String,
+    pub text: String,
 }
