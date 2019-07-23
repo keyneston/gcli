@@ -98,15 +98,11 @@ fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
 }
 
 fn parse_query_params(input: &str) -> IResult<&str, ()> {
-    let (input, _) = char('(')(input)?;
-    let (input, _) = take_whitespace(input)?;
+    let (input, _) = parse_seperator('(')(input)?;
     let (input, var_name) = parse_variable_name(input)?;
-    let (input, _) = take_whitespace(input)?;
-    let (input, _) = char(':')(input)?;
-    let (input, _) = take_whitespace(input)?;
+    let (input, _) = parse_seperator(':')(input)?;
     let (input, _thing) = take_while1(AsChar::is_alphanum)(input)?;
-    let (input, _) = take_whitespace(input)?;
-    let (input, _) = char(')')(input)?;
+    let (input, _) = parse_seperator(')')(input)?;
 
     Ok((input, ()))
 }
@@ -119,6 +115,16 @@ fn parse_variable_name(input: &str) -> IResult<&str, String> {
     s.push_str(name);
 
     return Ok((input, s));
+}
+
+fn parse_seperator(sep: char) -> impl Fn(&str) -> IResult<&str, ()> {
+    move |input: &str| -> IResult<&str, ()> {
+        let (input, _) = take_whitespace(input)?;
+        let (input, _) = char(sep)(input)?;
+        let (input, _) = take_whitespace(input)?;
+
+        Ok((input, ()))
+    }
 }
 
 #[cfg(test)]
