@@ -25,3 +25,8 @@ pub struct Operation {
     pub QueryType: QueryType,
     pub QueryParams: Option<HashMap<String, String>>,
 }
+
+#[derive(Debug, PartialEq)]
+pub struct Comment {
+    pub Text: String,
+}
