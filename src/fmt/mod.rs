@@ -1,20 +1,17 @@
 extern crate nom;
+use std::collections::HashMap;
 use std::fs;
 
 // TODO: figure this out
 #[path = "../ast/mod.rs"]
+#[allow(dead_code)]
 mod ast;
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag_no_case, take_till, take_while, take_while1, take_while_m_n},
+    bytes::complete::{tag_no_case, take_till, take_while, take_while1},
     character::complete::{char, space0},
-    character::is_alphabetic,
-    character::is_alphanumeric,
-    combinator::{map_res, opt, peek},
-    error,
-    error::VerboseError,
-    sequence::tuple,
+    combinator::opt,
     AsChar, IResult,
 };
 
@@ -39,12 +36,13 @@ pub fn format_string(input: &str) -> String {
 
 fn parse_query(input: &str) -> IResult<&str, Operation> {
     let (input, query_type) = parse_query_type(input)?;
+    let (input, query_params) = parse_query_params(input)?;
 
     Ok((
         input,
         Operation {
             query_type: query_type,
-            query_params: None,
+            query_params: Some(query_params),
         },
     ))
 }
@@ -97,14 +95,17 @@ fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
     ));
 }
 
-fn parse_query_params(input: &str) -> IResult<&str, ()> {
+fn parse_query_params(input: &str) -> IResult<&str, HashMap<ast::VarName, String>> {
     let (input, _) = parse_seperator('(')(input)?;
     let (input, var_name) = parse_variable_name(input)?;
     let (input, _) = parse_seperator(':')(input)?;
-    let (input, _thing) = take_while1(AsChar::is_alphanum)(input)?;
+    let (input, thing) = take_while1(AsChar::is_alphanum)(input)?;
     let (input, _) = parse_seperator(')')(input)?;
 
-    Ok((input, ()))
+    let mut hash: HashMap<ast::VarName, String> = HashMap::new();
+    hash.insert(var_name, thing.to_string());
+
+    Ok((input, hash))
 }
 
 fn parse_variable_name(input: &str) -> IResult<&str, String> {

@@ -6,35 +6,35 @@ use std::collections::HashMap;
 
 pub struct Client {
     client: reqwest::Client,
-        base: String,
+    base: String,
 }
 
 impl Client {
-    pub fn new(baseEndpoint: &str) -> Client {
-        return Client{
+    pub fn new(base_endpoint: &str) -> Client {
+        return Client {
             client: reqwest::Client::new(),
-            base: baseEndpoint.to_string(),
-        }
+            base: base_endpoint.to_string(),
+        };
     }
 
     pub fn get_schema(&self) {
         let mut req = HashMap::new();
 
-
-        req.insert("query", "query {
+        req.insert(
+            "query",
+            "query {
             search(needle: \"*\") {
               id
               label
             }
-        }");
+        }",
+        );
 
         let mut resp = self.client.post(&self.base).json(&req).send().unwrap();
 
-
-        let respBody: HashMap<String,Value> = resp.json().unwrap();
+        let resp_body: HashMap<String, Value> = resp.json().unwrap();
 
         println!("{:#?}", resp);
-        println!("{:#?}", respBody);
+        println!("{:#?}", resp_body);
     }
 }
-

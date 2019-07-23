@@ -6,26 +6,11 @@ use std::fs;
 mod fmt;
 mod graphqlclient;
 
-static version: &'static str = "0.1";
-
-struct Config {
-    colour: bool,
-    queryFile: String,
-}
-
-fn create_config(matches: clap::ArgMatches) -> Config {
-    return Config {
-        colour: true,
-        queryFile: matches
-            .value_of("queryFile")
-            .unwrap_or("query.graphql")
-            .to_string(),
-    };
-}
+static VERSION: &'static str = "0.1";
 
 fn main() {
     let matches = App::new("gcli")
-        .version(version)
+        .version(VERSION)
         .subcommand(
             SubCommand::with_name("fmt")
                 .about("format graphql files")
@@ -68,10 +53,8 @@ fn fmt_command(matches: &ArgMatches) {
 fn query_command(matches: &ArgMatches) {
     let client = graphqlclient::Client::new("http://localhost:8080/query");
     client.get_schema();
-}
 
-fn make_graphql_query() {
-    unimplemented!();
+    read_query_file(matches.value_of("queryFile").unwrap());
 }
 
 fn read_query_file(filename: &str) -> String {
