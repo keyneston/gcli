@@ -66,8 +66,10 @@ pub enum Definition {
 
 #[derive(Debug, PartialEq)]
 pub struct Operation {
+    pub name: Option<String>,
     pub query_type: QueryType,
     pub query_params: Option<HashMap<VarName, String>>,
+    pub selection_set: SelectionSet,
 }
 
 #[derive(Debug, PartialEq)]

@@ -38,18 +38,22 @@ pub fn format_string(input: &str) -> String {
 
 fn parse_query(input: &str) -> IResult<&str, Operation> {
     let (input, query_type) = parse_query_type(input)?;
-    let (input, query_params) = parse_query_params(input)?;
+    let (input, query_params) = opt(parse_query_params)(input)?;
+    let (input, selection_set) = parse_selection_set(input)?;
 
     Ok((
         input,
         Operation {
+            name: None, // TODO: parse this.
             query_type: query_type,
-            query_params: Some(query_params),
+            query_params: query_params,
+            selection_set: selection_set,
         },
     ))
 }
 
 fn parse_selection_set(input: &str) -> IResult<&str, SelectionSet> {
+    let (input, _) = multispace0(input)?;
     let (input, _) = parse_sigil('{')(input)?;
     let (input, res) = separated_list(seperator, parse_selection_item)(input)?;
     let (input, _) = multispace0(input)?; // consume any lingering whitespace.
@@ -81,8 +85,6 @@ fn parse_query_type(input: &str) -> IResult<&str, QueryType> {
         tag_no_case("mutation"),
         tag_no_case("subscription"),
     )))(input)?;
-    let (input, _) = space0(input)?;
-    let (input, _) = char('{')(input)?;
 
     let query_type = query_type.map(|s: &str| {
         let mut s = s.to_string();
@@ -288,5 +290,24 @@ mod tests {
 
         assert_eq!(field, expected);
         assert_eq!(remaining, "blah }");
+    }
+
+    #[test]
+    fn parse_simple_query() {
+        let input = "query\n{\nviewer\n{\nlogin\n}\n}";
+
+        let mut sub = SelectionItem::new_field("viewer");
+        sub.add(SelectionItem::new_field("login"));
+
+        let expected = Operation {
+            query_type: QueryType::Query,
+            query_params: None,
+            name: None,
+            selection_set: vec![sub],
+        };
+
+        let (remaining, op) = parse_query(input).unwrap();
+        assert_eq!(expected, op);
+        assert_eq!("", remaining);
     }
 }
