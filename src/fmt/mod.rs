@@ -9,14 +9,15 @@ mod ast;
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag_no_case, take_till, take_while, take_while1},
-    character::complete::{char, space0},
+    bytes::complete::tag_no_case,
+    bytes::complete::take_while1,
+    character::complete::{char, line_ending, multispace0, not_line_ending, one_of, space0},
     combinator::opt,
-    multi::separated_list,
+    multi::{many1, separated_list},
     AsChar, IResult,
 };
 
-use ast::{Operation, QueryType};
+use ast::{Operation, QueryType, SelectionItem, SelectionItem::*, SelectionSet};
 
 pub fn format_file(filename: &str) -> String {
     let contents = fs::read_to_string(filename).unwrap();
@@ -48,23 +49,29 @@ fn parse_query(input: &str) -> IResult<&str, Operation> {
     ))
 }
 
-fn parse_selection_set(input: &str) -> IResult<&str, ast::SelectionSet> {
-    let (input, _) = parse_seperator('{')(input)?;
-    let (input, res) = separated_list(
-        // The parse_seperator('\n') bit doesn't work because parse_seperator eats the newline
-        // before it gets to the checking of the separator itself.
-        alt((parse_seperator(','), parse_seperator('\n'))),
-        parse_selection_item,
-    )(input)?;
-    let (input, _) = parse_seperator('}')(input)?;
+fn parse_selection_set(input: &str) -> IResult<&str, SelectionSet> {
+    let (input, _) = parse_sigil('{')(input)?;
+    let (input, res) = separated_list(seperator, parse_selection_item)(input)?;
+    let (input, _) = multispace0(input)?; // consume any lingering whitespace.
+    let (input, _) = parse_sigil('}')(input)?;
 
     Ok((input, res))
 }
 
-fn parse_selection_item(input: &str) -> IResult<&str, ast::SelectionItem> {
-    let (input, item) = take_while(AsChar::is_alphanum)(input)?;
+fn parse_selection_item(input: &str) -> IResult<&str, SelectionItem> {
+    let (input, _) = multispace0(input)?;
+    let (input, name) = take_while1(AsChar::is_alphanum)(input)?;
+    let (input, sub_selection) = opt(parse_selection_set)(input)?;
 
-    Ok((input, ast::SelectionItem::Field(item.to_string())))
+    let new_field = Field {
+        name: name.to_string(),
+        selection: match sub_selection {
+            Some(sub) => Some(Box::new(sub)),
+            None => None,
+        },
+    };
+
+    Ok((input, new_field))
 }
 
 fn parse_query_type(input: &str) -> IResult<&str, QueryType> {
@@ -92,25 +99,11 @@ fn parse_query_type(input: &str) -> IResult<&str, QueryType> {
     }
 }
 
-fn is_eol(c: char) -> bool {
-    c == '\n'
-}
-
-fn is_whitespace(c: char) -> bool {
-    c == '\n' || c == ' ' || c == '\t'
-}
-
-fn take_whitespace(input: &str) -> IResult<&str, &str> {
-    let (input, found) = take_while(is_whitespace)(input)?;
-
-    Ok((input, found))
-}
-
 fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
-    let (input, _) = take_whitespace(input)?;
+    let (input, _) = space0(input)?;
     let (input, _) = char('#')(input)?;
-    let (input, comment_text) = take_till(is_eol)(input)?;
-    let (input, _) = take_whitespace(input)?;
+    let (input, comment_text) = not_line_ending(input)?;
+    let (input, _) = line_ending(input)?;
 
     return Ok((
         input,
@@ -121,11 +114,11 @@ fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
 }
 
 fn parse_query_params(input: &str) -> IResult<&str, HashMap<ast::VarName, String>> {
-    let (input, _) = parse_seperator('(')(input)?;
+    let (input, _) = parse_sigil('(')(input)?;
     let (input, var_name) = parse_variable_name(input)?;
-    let (input, _) = parse_seperator(':')(input)?;
+    let (input, _) = parse_sigil(':')(input)?;
     let (input, thing) = take_while1(AsChar::is_alphanum)(input)?;
-    let (input, _) = parse_seperator(')')(input)?;
+    let (input, _) = parse_sigil(')')(input)?;
 
     let mut hash: HashMap<ast::VarName, String> = HashMap::new();
     hash.insert(var_name, thing.to_string());
@@ -143,24 +136,27 @@ fn parse_variable_name(input: &str) -> IResult<&str, String> {
     return Ok((input, s));
 }
 
-fn parse_seperator(sep: char) -> impl Fn(&str) -> IResult<&str, ()> {
+fn parse_sigil(sigil: char) -> impl Fn(&str) -> IResult<&str, ()> {
     move |input: &str| -> IResult<&str, ()> {
-        let (input, found) = take_whitespace(input)?;
-
-        let (input, _) = if !found.contains(sep) {
-            char(sep)(input)?
-        } else {
-            (input, 'a') // The 'a' is here simply to match types, not because it is needed/used.
-        };
-
-        let (input, _) = take_whitespace(input)?;
+        let (input, _) = space0(input)?;
+        let (input, _) = char(sigil)(input)?;
+        let (input, _) = space0(input)?;
 
         Ok((input, ()))
     }
 }
 
+fn seperator(input: &str) -> IResult<&str, ()> {
+    let (input, _) = space0(input)?;
+    let (input, _) = many1(one_of("\n\r,"))(input)?;
+    let (input, _) = multispace0(input)?;
+
+    Ok((input, ()))
+}
+
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
 
     use super::*;
 
@@ -234,9 +230,9 @@ mod tests {
         assert_eq!(
             selection_set,
             vec!(
-                ast::SelectionItem::Field("id".to_string()),
-                ast::SelectionItem::Field("foo".to_string()),
-                ast::SelectionItem::Field("bar".to_string()),
+                SelectionItem::new_field("id"),
+                SelectionItem::new_field("foo"),
+                SelectionItem::new_field("bar"),
             )
         )
     }
@@ -249,19 +245,48 @@ mod tests {
         assert_eq!(
             selection_set,
             vec!(
-                ast::SelectionItem::Field("id".to_string()),
-                ast::SelectionItem::Field("foo".to_string()),
-                ast::SelectionItem::Field("bar".to_string()),
+                SelectionItem::new_field("id"),
+                SelectionItem::new_field("foo"),
+                SelectionItem::new_field("bar"),
             )
         )
     }
 
     #[test]
-    fn newline_seperator_test_parse_seperator() {
-        let input = "  \n   ";
-        // Mostly we are checking that this succeeds at all.
-        let res = parse_seperator('\n')(input);
+    fn recursive_test_parse_selection_set() {
+        let input = "{
+            id
+            foo { baz, qaz }
+            bar
+        }";
 
-        assert_matches!(res, Ok(_));
+        let mut recursive = SelectionItem::new_field("foo");
+        recursive.add(SelectionItem::new_field("baz"));
+        recursive.add(SelectionItem::new_field("qaz"));
+
+        let (_, selection_set) = parse_selection_set(input).unwrap();
+
+        assert_eq!(
+            vec!(
+                SelectionItem::new_field("id"),
+                recursive,
+                SelectionItem::new_field("bar"),
+            ),
+            selection_set,
+        )
+    }
+
+    #[test]
+    fn fields_test_parse_selection_item() {
+        let input = "foo { a, b } blah }";
+        // Mostly we are checking that this succeeds at all.
+        let (remaining, field) = parse_selection_item(input).unwrap();
+
+        let mut expected = SelectionItem::new_field("foo");
+        expected.add(SelectionItem::new_field("a"));
+        expected.add(SelectionItem::new_field("b"));
+
+        assert_eq!(field, expected);
+        assert_eq!(remaining, "blah }");
     }
 }
