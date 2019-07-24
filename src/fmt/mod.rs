@@ -63,6 +63,12 @@ fn parse_selection_set(input: &str) -> IResult<&str, SelectionSet> {
     Ok((input, res))
 }
 
+fn parse_element(input: &str) -> IResult<&str, Element> {
+    let (input, var_name) = parse_variable_name(input)?;
+
+    Ok((input, var_name))
+}
+
 fn parse_selection_item(input: &str) -> IResult<&str, SelectionItem> {
     let (input, _) = multispace0(input)?;
     let (input, name) = parse_variable_name(input)?;
@@ -70,7 +76,7 @@ fn parse_selection_item(input: &str) -> IResult<&str, SelectionItem> {
     let (input, sub_selection) = opt(parse_selection_set)(input)?;
 
     let new_field = Field {
-        name: name.to_string(),
+        name: name,
         arguments: args,
         selection: match sub_selection {
             Some(sub) => Some(Box::new(sub)),
@@ -118,20 +124,20 @@ fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
     ));
 }
 
-fn parse_query_params(input: &str) -> IResult<&str, HashMap<ast::VarName, String>> {
+fn parse_query_params(input: &str) -> IResult<&str, Args> {
     let (input, _) = parse_sigil('(')(input)?;
     let (input, var_name) = parse_variable_name(input)?;
     let (input, _) = parse_sigil(':')(input)?;
     let (input, thing) = take_while1(AsChar::is_alphanum)(input)?;
     let (input, _) = parse_sigil(')')(input)?;
 
-    let mut hash: HashMap<ast::VarName, String> = HashMap::new();
-    hash.insert(var_name, thing.to_string());
+    let mut hash = HashMap::new();
+    hash.insert(var_name, Element::Name(thing.to_string()));
 
     Ok((input, hash))
 }
 
-fn parse_variable_name(input: &str) -> IResult<&str, String> {
+fn parse_variable_name(input: &str) -> IResult<&str, Element> {
     let (input, sigil) = opt(char('$'))(input)?;
     let (input, name) = take_while1(AsChar::is_alphanum)(input)?;
 
@@ -141,7 +147,7 @@ fn parse_variable_name(input: &str) -> IResult<&str, String> {
     };
     s.push_str(name);
 
-    return Ok((input, s));
+    return Ok((input, Element::Name(s)));
 }
 
 fn parse_sigil(sigil: char) -> impl Fn(&str) -> IResult<&str, ()> {
@@ -191,7 +197,7 @@ mod tests {
         let input = "$foo: baz_bar";
 
         let (_, var_name) = parse_variable_name(input).unwrap();
-        assert_eq!(var_name, "$foo");
+        assert_eq!(var_name, Element::Name("$foo".to_string()));
     }
 
     #[test]
@@ -347,7 +353,10 @@ mod tests {
         } = sub
         {
             let mut map = HashMap::new();
-            map.insert("id".to_string(), "foo".to_string());
+            map.insert(
+                Element::Name("id".to_string()),
+                Element::Name("foo".to_string()),
+            );
             *arguments = Some(map);
         }
 
@@ -367,8 +376,14 @@ mod tests {
     fn test_parse_arguments() {
         let input = "(a: b, c:d)";
         let mut expected = HashMap::new();
-        expected.insert("a".to_string(), "b".to_string());
-        expected.insert("c".to_string(), "d".to_string());
+        expected.insert(
+            Element::Name("a".to_string()),
+            Element::Name("b".to_string()),
+        );
+        expected.insert(
+            Element::Name("c".to_string()),
+            Element::Name("d".to_string()),
+        );
 
         let (_, args) = parse_arguments(input).unwrap();
         assert_eq!(expected, args)

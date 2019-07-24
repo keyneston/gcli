@@ -7,8 +7,15 @@ pub enum QueryType {
     Subscription,
 }
 
-pub type VarName = String;
-pub type Args = HashMap<String, String>;
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub enum Element {
+    Str(String),
+    Num(String),
+    Name(String),
+    Thing, // TODO: something...?
+}
+
+pub type Args = HashMap<Element, Element>;
 
 #[derive(Debug, PartialEq)]
 pub struct Document {
@@ -18,7 +25,7 @@ pub struct Document {
 #[derive(Debug, PartialEq, Clone)]
 pub enum SelectionItem {
     Field {
-        name: String,
+        name: Element,
         selection: Option<Box<SelectionSet>>,
         arguments: Option<Args>,
     },
@@ -29,7 +36,7 @@ pub enum SelectionItem {
 impl SelectionItem {
     pub fn new_field(name: &str) -> SelectionItem {
         return SelectionItem::Field {
-            name: name.to_string(),
+            name: Element::Name(name.to_string()),
             selection: None,
             arguments: None,
         };
@@ -63,7 +70,7 @@ pub enum Definition {
 pub struct Operation {
     pub name: Option<String>,
     pub query_type: QueryType,
-    pub query_params: Option<HashMap<VarName, String>>,
+    pub query_params: Option<Args>,
     pub selection_set: SelectionSet,
 }
 
