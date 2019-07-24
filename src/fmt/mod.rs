@@ -100,10 +100,10 @@ fn is_whitespace(c: char) -> bool {
     c == '\n' || c == ' ' || c == '\t'
 }
 
-fn take_whitespace(input: &str) -> IResult<&str, ()> {
-    let (input, _) = take_while(is_whitespace)(input)?;
+fn take_whitespace(input: &str) -> IResult<&str, &str> {
+    let (input, found) = take_while(is_whitespace)(input)?;
 
-    Ok((input, ()))
+    Ok((input, found))
 }
 
 fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
@@ -145,8 +145,14 @@ fn parse_variable_name(input: &str) -> IResult<&str, String> {
 
 fn parse_seperator(sep: char) -> impl Fn(&str) -> IResult<&str, ()> {
     move |input: &str| -> IResult<&str, ()> {
-        let (input, _) = take_whitespace(input)?;
-        let (input, _) = char(sep)(input)?;
+        let (input, found) = take_whitespace(input)?;
+
+        let (input, _) = if !found.contains(sep) {
+            char(sep)(input)?
+        } else {
+            (input, 'a') // The 'a' is here simply to match types, not because it is needed/used.
+        };
+
         let (input, _) = take_whitespace(input)?;
 
         Ok((input, ()))
@@ -155,6 +161,7 @@ fn parse_seperator(sep: char) -> impl Fn(&str) -> IResult<&str, ()> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
@@ -247,5 +254,14 @@ mod tests {
                 ast::SelectionItem::Field("bar".to_string()),
             )
         )
+    }
+
+    #[test]
+    fn newline_seperator_test_parse_seperator() {
+        let input = "  \n   ";
+        // Mostly we are checking that this succeeds at all.
+        let res = parse_seperator('\n')(input);
+
+        assert_matches!(res, Ok(_));
     }
 }
