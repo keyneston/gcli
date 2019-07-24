@@ -65,11 +65,13 @@ fn parse_selection_set(input: &str) -> IResult<&str, SelectionSet> {
 
 fn parse_selection_item(input: &str) -> IResult<&str, SelectionItem> {
     let (input, _) = multispace0(input)?;
-    let (input, name) = take_while1(AsChar::is_alphanum)(input)?;
+    let (input, name) = parse_variable_name(input)?;
+    let (input, args) = opt(parse_arguments)(input)?;
     let (input, sub_selection) = opt(parse_selection_set)(input)?;
 
     let new_field = Field {
         name: name.to_string(),
+        arguments: args,
         selection: match sub_selection {
             Some(sub) => Some(Box::new(sub)),
             None => None,
@@ -334,12 +336,20 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn parse_simple_query_with_args() {
         let input = "query\n{\nviewer(id: foo)\n{\nlogin\n}\n}";
 
         let mut sub = SelectionItem::new_field("viewer");
         sub.add(SelectionItem::new_field("login"));
+
+        if let Field {
+            ref mut arguments, ..
+        } = sub
+        {
+            let mut map = HashMap::new();
+            map.insert("id".to_string(), "foo".to_string());
+            *arguments = Some(map);
+        }
 
         let expected = Operation {
             query_type: QueryType::Query,

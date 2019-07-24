@@ -20,7 +20,7 @@ pub enum SelectionItem {
     Field {
         name: String,
         selection: Option<Box<SelectionSet>>,
-        //arguments: Option<Argu
+        arguments: Option<Args>,
     },
     FragmentSpread(String),
     InlineFragment,
@@ -31,26 +31,20 @@ impl SelectionItem {
         return SelectionItem::Field {
             name: name.to_string(),
             selection: None,
+            arguments: None,
         };
     }
 
     pub fn add(&mut self, new_field: SelectionItem) {
-        match self {
-            SelectionItem::Field {
-                ref mut selection, ..
-            } => {
-                let new_selection = match selection {
-                    Some(fields) => {
-                        let mut fields = fields.clone();
-                        fields.push(new_field);
-                        fields
-                    }
-                    None => Box::new(vec![new_field]),
-                };
-                *selection = Some(new_selection);
+        if let SelectionItem::Field {
+            ref mut selection, ..
+        } = self
+        {
+            match selection {
+                Some(fields) => fields.push(new_field),
+                None => *selection = Some(Box::new(vec![new_field])),
             }
-            _ => return,
-        };
+        }
     }
 }
 
