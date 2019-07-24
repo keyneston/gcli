@@ -8,6 +8,7 @@ pub enum QueryType {
 }
 
 pub type VarName = String;
+pub type Args = HashMap<String, String>;
 
 #[derive(Debug, PartialEq)]
 pub struct Document {

@@ -14,10 +14,11 @@ use nom::{
     character::complete::{char, line_ending, multispace0, not_line_ending, one_of, space0},
     combinator::opt,
     multi::{many1, separated_list},
+    sequence::separated_pair,
     AsChar, IResult,
 };
 
-use ast::{Operation, QueryType, SelectionItem, SelectionItem::*, SelectionSet};
+use ast::{Operation, QueryType, SelectionItem, SelectionItem::*, SelectionSet, *};
 
 pub fn format_file(filename: &str) -> String {
     let contents = fs::read_to_string(filename).unwrap();
@@ -129,10 +130,13 @@ fn parse_query_params(input: &str) -> IResult<&str, HashMap<ast::VarName, String
 }
 
 fn parse_variable_name(input: &str) -> IResult<&str, String> {
-    let (input, sigil) = char('$')(input)?;
+    let (input, sigil) = opt(char('$'))(input)?;
     let (input, name) = take_while1(AsChar::is_alphanum)(input)?;
 
-    let mut s = sigil.to_string();
+    let mut s = match sigil {
+        Some(sig) => sig.to_string(),
+        None => "".to_string(),
+    };
     s.push_str(name);
 
     return Ok((input, s));
@@ -146,6 +150,24 @@ fn parse_sigil(sigil: char) -> impl Fn(&str) -> IResult<&str, ()> {
 
         Ok((input, ()))
     }
+}
+
+fn parse_arguments(input: &str) -> IResult<&str, Args> {
+    let (input, _) = multispace0(input)?;
+    let (input, _) = parse_sigil('(')(input)?;
+    let (input, res) = separated_list(
+        seperator,
+        separated_pair(parse_variable_name, parse_sigil(':'), parse_variable_name),
+    )(input)?;
+    let (input, _) = multispace0(input)?; // consume any lingering whitespace.
+    let (input, _) = parse_sigil(')')(input)?;
+
+    let mut hash = HashMap::new();
+    for (k, v) in res {
+        hash.insert(k, v);
+    }
+
+    Ok((input, hash))
 }
 
 fn seperator(input: &str) -> IResult<&str, ()> {
@@ -309,5 +331,36 @@ mod tests {
         let (remaining, op) = parse_query(input).unwrap();
         assert_eq!(expected, op);
         assert_eq!("", remaining);
+    }
+
+    #[test]
+    #[ignore]
+    fn parse_simple_query_with_args() {
+        let input = "query\n{\nviewer(id: foo)\n{\nlogin\n}\n}";
+
+        let mut sub = SelectionItem::new_field("viewer");
+        sub.add(SelectionItem::new_field("login"));
+
+        let expected = Operation {
+            query_type: QueryType::Query,
+            query_params: None,
+            name: None,
+            selection_set: vec![sub],
+        };
+
+        let (remaining, op) = parse_query(input).unwrap();
+        assert_eq!(expected, op);
+        assert_eq!("", remaining);
+    }
+
+    #[test]
+    fn test_parse_arguments() {
+        let input = "(a: b, c:d)";
+        let mut expected = HashMap::new();
+        expected.insert("a".to_string(), "b".to_string());
+        expected.insert("c".to_string(), "d".to_string());
+
+        let (_, args) = parse_arguments(input).unwrap();
+        assert_eq!(expected, args)
     }
 }
