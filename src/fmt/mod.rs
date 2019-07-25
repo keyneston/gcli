@@ -9,8 +9,7 @@ mod ast;
 
 use nom::{
     branch::alt,
-    bytes::complete::tag_no_case,
-    bytes::complete::take_while1,
+    bytes::complete::{tag_no_case, take_while, take_while1},
     character::complete::{char, line_ending, multispace0, not_line_ending, one_of, space0},
     combinator::opt,
     multi::{many1, separated_list},
@@ -64,9 +63,17 @@ fn parse_selection_set(input: &str) -> IResult<&str, SelectionSet> {
 }
 
 fn parse_element(input: &str) -> IResult<&str, Element> {
-    let (input, elem) = alt((parse_bool, parse_name, parse_number))(input)?;
+    let (input, elem) = alt((parse_string, parse_bool, parse_name, parse_number))(input)?;
 
     Ok((input, elem))
+}
+
+fn parse_string(input: &str) -> IResult<&str, Element> {
+    let (input, _) = char('"')(input)?;
+    let (input, s) = take_while(|x| x != '"')(input)?;
+    let (input, _) = char('"')(input)?;
+
+    Ok((input, Element::Str(s.to_string())))
 }
 
 fn parse_bool(input: &str) -> IResult<&str, Element> {
@@ -501,5 +508,20 @@ mod tests {
 
         let (_, res) = parse_element(input).unwrap();
         assert_eq!(Element::Bool(false), res);
+    }
+
+    #[test]
+    fn test_parse_simple_string() {
+        let input = "\"foo\"";
+        let (_, res) = parse_element(input).unwrap();
+        assert_eq!(Element::Str("foo".to_string()), res);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_advanced_string() {
+        let input = "\"f\\u01234oo\"";
+        let (_, res) = parse_element(input).unwrap();
+        assert_eq!(Element::Str("foo".to_string()), res);
     }
 }
