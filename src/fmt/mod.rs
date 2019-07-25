@@ -64,9 +64,19 @@ fn parse_selection_set(input: &str) -> IResult<&str, SelectionSet> {
 }
 
 fn parse_element(input: &str) -> IResult<&str, Element> {
-    let (input, elem) = alt((parse_name, parse_number))(input)?;
+    let (input, elem) = alt((parse_bool, parse_name, parse_number))(input)?;
 
     Ok((input, elem))
+}
+
+fn parse_bool(input: &str) -> IResult<&str, Element> {
+    let (input, maybe_bool) = alt((tag_no_case("true"), tag_no_case("false")))(input)?;
+
+    match maybe_bool {
+        "true" => Ok((input, Element::Bool(true))),
+        "false" => Ok((input, Element::Bool(false))),
+        _ => unreachable!(),
+    }
 }
 
 fn is_digit(c: char) -> bool {
@@ -466,5 +476,30 @@ mod tests {
 
         let (_, res) = parse_number(input).unwrap();
         assert_eq!(Element::Num("-132.5005".to_string()), res);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_complex_float_parse_number() {
+        let input = "5e-10";
+
+        let (_, res) = parse_number(input).unwrap();
+        assert_eq!(Element::Num("5e-10".to_string()), res);
+    }
+
+    #[test]
+    fn test_true_parse_bool() {
+        let input = "true";
+
+        let (_, res) = parse_element(input).unwrap();
+        assert_eq!(Element::Bool(true), res);
+    }
+
+    #[test]
+    fn test_false_parse_bool() {
+        let input = "false";
+
+        let (_, res) = parse_element(input).unwrap();
+        assert_eq!(Element::Bool(false), res);
     }
 }

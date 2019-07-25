@@ -12,6 +12,7 @@ pub enum Element {
     Str(String),
     Num(String),
     Name(String),
+    Bool(bool),
     Thing, // TODO: something...?
 }
 
