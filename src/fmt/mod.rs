@@ -1,5 +1,5 @@
 extern crate nom;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 
 // TODO: figure this out
@@ -9,7 +9,7 @@ mod ast;
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag_no_case, take_while, take_while1},
+    bytes::complete::{tag, tag_no_case, take_while, take_while1},
     character::complete::{char, line_ending, multispace0, not_line_ending, one_of, space0},
     combinator::opt,
     multi::{many1, separated_list},
@@ -63,14 +63,28 @@ fn parse_selection_set(input: &str) -> IResult<&str, SelectionSet> {
 }
 
 fn parse_element(input: &str) -> IResult<&str, Element> {
-    let (input, elem) = alt((parse_string, parse_bool, parse_name, parse_number))(input)?;
+    let (input, elem) = alt((
+        parse_block_string,
+        parse_string,
+        parse_bool,
+        parse_name,
+        parse_number,
+    ))(input)?;
 
     Ok((input, elem))
 }
 
+fn parse_block_string(input: &str) -> IResult<&str, Element> {
+    let (input, _) = tag("\"\"\"")(input)?;
+    let (input, s) = take_while(|x| x != '"')(input)?;
+    let (input, _) = tag("\"\"\"")(input)?;
+
+    Ok((input, Element::BlockStr(s.to_string())))
+}
+
 fn parse_string(input: &str) -> IResult<&str, Element> {
     let (input, _) = char('"')(input)?;
-    let (input, s) = take_while(|x| x != '"')(input)?;
+    let (input, s) = take_while(|x| x != '"' && x != '\n')(input)?;
     let (input, _) = char('"')(input)?;
 
     Ok((input, Element::Str(s.to_string())))
@@ -173,7 +187,7 @@ fn parse_query_params(input: &str) -> IResult<&str, Args> {
     let (input, thing) = take_while1(AsChar::is_alphanum)(input)?;
     let (input, _) = parse_sigil(')')(input)?;
 
-    let mut hash = HashMap::new();
+    let mut hash = BTreeMap::new();
     hash.insert(var_name, Element::Name(thing.to_string()));
 
     Ok((input, hash))
@@ -217,7 +231,7 @@ fn parse_arguments(input: &str) -> IResult<&str, Args> {
     let (input, _) = multispace0(input)?; // consume any lingering whitespace.
     let (input, _) = parse_sigil(')')(input)?;
 
-    let mut hash = HashMap::new();
+    let mut hash = BTreeMap::new();
     for (k, v) in res {
         hash.insert(k, v);
     }
@@ -399,7 +413,7 @@ mod tests {
             ref mut arguments, ..
         } = sub
         {
-            let mut map = HashMap::new();
+            let mut map = BTreeMap::new();
             map.insert(
                 Element::Name("id".to_string()),
                 Element::Name("foo".to_string()),
@@ -422,7 +436,7 @@ mod tests {
     #[test]
     fn test_parse_arguments() {
         let input = "(a: b, c:d)";
-        let mut expected = HashMap::new();
+        let mut expected = BTreeMap::new();
         expected.insert(
             Element::Name("a".to_string()),
             Element::Name("b".to_string()),
@@ -439,7 +453,7 @@ mod tests {
     #[test]
     fn test_complex_parse_arguments() {
         let input = "(a: 1.5, c:d)";
-        let mut expected = HashMap::new();
+        let mut expected = BTreeMap::new();
         expected.insert(
             Element::Name("a".to_string()),
             Element::Num("1.5".to_string()),

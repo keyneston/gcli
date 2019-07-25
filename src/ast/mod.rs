@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Debug, PartialEq)]
 pub enum QueryType {
@@ -10,20 +10,36 @@ pub enum QueryType {
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum Element {
     Str(String),
+    BlockStr(String),
     Num(String),
     Name(String),
     Bool(bool),
-    Thing, // TODO: something...?
+    Struct(SelectionSet),
 }
 
-pub type Args = HashMap<Element, Element>;
+pub type Args = BTreeMap<Element, Element>;
+
+// impl Args {
+//     fn new() -> Self {
+//         BTreeMap::new()
+//     }
+// }
+
+// impl Hash for Args {
+//     fn hash<H: Hasher>(&self, state: &mut H) {
+//         for (key, val) in self.iter() {
+//             key.hash(state);
+//             val.hash(state);
+//         }
+//     }
+// }
 
 #[derive(Debug, PartialEq)]
 pub struct Document {
     definitions: Vec<Definition>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq, Hash, Ord, PartialOrd)]
 pub enum SelectionItem {
     Field {
         name: Element,
@@ -56,7 +72,7 @@ impl SelectionItem {
     }
 }
 
-pub type SelectionSet = Vec<SelectionItem>;
+pub type SelectionSet = VecDeque<SelectionItem>;
 
 /// [Definition](https://graphql.github.io/graphql-spec/June2018/#Definition)
 #[derive(Debug, PartialEq)]
