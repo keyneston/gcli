@@ -14,7 +14,7 @@ use nom::{
     character::complete::{char, line_ending, multispace0, not_line_ending, one_of, space0},
     combinator::opt,
     multi::{many1, separated_list},
-    sequence::separated_pair,
+    sequence::{separated_pair, tuple},
     AsChar, IResult,
 };
 
@@ -64,14 +64,39 @@ fn parse_selection_set(input: &str) -> IResult<&str, SelectionSet> {
 }
 
 fn parse_element(input: &str) -> IResult<&str, Element> {
-    let (input, var_name) = parse_variable_name(input)?;
+    let (input, elem) = alt((parse_name, parse_number))(input)?;
 
-    Ok((input, var_name))
+    Ok((input, elem))
+}
+
+fn is_digit(c: char) -> bool {
+    c >= '0' && c <= '9'
+}
+
+fn parse_number(input: &str) -> IResult<&str, Element> {
+    let (input, maybe_negative) = opt(char('-'))(input)?;
+    let (input, integer) = take_while1(is_digit)(input)?;
+    let (input, maybe_decimal) = opt(tuple((char('.'), take_while1(is_digit))))(input)?;
+
+    let mut ret = String::new();
+
+    if let Some(neg) = maybe_negative {
+        ret.push(neg);
+    }
+
+    ret.push_str(integer);
+
+    if let Some((dot, decimal)) = maybe_decimal {
+        ret.push(dot);
+        ret.push_str(decimal);
+    }
+
+    Ok((input, Element::Num(ret)))
 }
 
 fn parse_selection_item(input: &str) -> IResult<&str, SelectionItem> {
     let (input, _) = multispace0(input)?;
-    let (input, name) = parse_variable_name(input)?;
+    let (input, name) = parse_name(input)?;
     let (input, args) = opt(parse_arguments)(input)?;
     let (input, sub_selection) = opt(parse_selection_set)(input)?;
 
@@ -126,7 +151,7 @@ fn parse_comment(input: &str) -> IResult<&str, ast::Comment> {
 
 fn parse_query_params(input: &str) -> IResult<&str, Args> {
     let (input, _) = parse_sigil('(')(input)?;
-    let (input, var_name) = parse_variable_name(input)?;
+    let (input, var_name) = parse_name(input)?;
     let (input, _) = parse_sigil(':')(input)?;
     let (input, thing) = take_while1(AsChar::is_alphanum)(input)?;
     let (input, _) = parse_sigil(')')(input)?;
@@ -137,15 +162,20 @@ fn parse_query_params(input: &str) -> IResult<&str, Args> {
     Ok((input, hash))
 }
 
-fn parse_variable_name(input: &str) -> IResult<&str, Element> {
+fn parse_name(input: &str) -> IResult<&str, Element> {
     let (input, sigil) = opt(char('$'))(input)?;
-    let (input, name) = take_while1(AsChar::is_alphanum)(input)?;
+    let (input, first_chars) = take_while1(AsChar::is_alpha)(input)?;
+    let (input, remain) = opt(take_while1(AsChar::is_alphanum))(input)?;
 
     let mut s = match sigil {
         Some(sig) => sig.to_string(),
         None => "".to_string(),
     };
-    s.push_str(name);
+
+    s.push_str(first_chars);
+    if let Some(remain) = remain {
+        s.push_str(remain);
+    }
 
     return Ok((input, Element::Name(s)));
 }
@@ -165,7 +195,7 @@ fn parse_arguments(input: &str) -> IResult<&str, Args> {
     let (input, _) = parse_sigil('(')(input)?;
     let (input, res) = separated_list(
         seperator,
-        separated_pair(parse_variable_name, parse_sigil(':'), parse_variable_name),
+        separated_pair(parse_name, parse_sigil(':'), parse_element),
     )(input)?;
     let (input, _) = multispace0(input)?; // consume any lingering whitespace.
     let (input, _) = parse_sigil(')')(input)?;
@@ -196,7 +226,7 @@ mod tests {
     fn test_parse_var_name() {
         let input = "$foo: baz_bar";
 
-        let (_, var_name) = parse_variable_name(input).unwrap();
+        let (_, var_name) = parse_name(input).unwrap();
         assert_eq!(var_name, Element::Name("$foo".to_string()));
     }
 
@@ -387,5 +417,54 @@ mod tests {
 
         let (_, args) = parse_arguments(input).unwrap();
         assert_eq!(expected, args)
+    }
+
+    #[test]
+    fn test_complex_parse_arguments() {
+        let input = "(a: 1.5, c:d)";
+        let mut expected = HashMap::new();
+        expected.insert(
+            Element::Name("a".to_string()),
+            Element::Num("1.5".to_string()),
+        );
+        expected.insert(
+            Element::Name("c".to_string()),
+            Element::Name("d".to_string()),
+        );
+
+        let (_, args) = parse_arguments(input).unwrap();
+        assert_eq!(expected, args)
+    }
+
+    #[test]
+    fn test_simple_int_parse_number() {
+        let input = "1";
+
+        let (_, res) = parse_number(input).unwrap();
+        assert_eq!(Element::Num("1".to_string()), res);
+    }
+
+    #[test]
+    fn test_simple_negative_int_parse_number() {
+        let input = "-1";
+
+        let (_, res) = parse_number(input).unwrap();
+        assert_eq!(Element::Num("-1".to_string()), res);
+    }
+
+    #[test]
+    fn test_simple_negative_float_parse_number() {
+        let input = "-1.5";
+
+        let (_, res) = parse_number(input).unwrap();
+        assert_eq!(Element::Num("-1.5".to_string()), res);
+    }
+
+    #[test]
+    fn test_larger_negative_float_parse_number() {
+        let input = "-132.5005";
+
+        let (_, res) = parse_number(input).unwrap();
+        assert_eq!(Element::Num("-132.5005".to_string()), res);
     }
 }
